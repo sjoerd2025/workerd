@@ -138,23 +138,14 @@ function buildTree(invocations) {
 
 // Verify that invocations with a parentSpanId have a non-zero value.
 function verifyTraceIds(invocations) {
-  const byTraceId = new Map();
   for (const inv of invocations) {
-    if (!byTraceId.has(inv.traceId)) {
-      byTraceId.set(inv.traceId, []);
-    }
-    byTraceId.get(inv.traceId).push(inv);
-  }
-  for (const [traceId, group] of byTraceId) {
-    for (const inv of group) {
-      if (inv.parentSpanId !== undefined) {
-        // parentSpanId must be non-zero.
-        assert.notStrictEqual(
-          inv.parentSpanId,
-          '0000000000000000',
-          'parentSpanId must be non-zero'
-        );
-      }
+    if (inv.parentSpanId !== undefined) {
+      // parentSpanId must be non-zero.
+      assert.notStrictEqual(
+        inv.parentSpanId,
+        '0000000000000000',
+        'parentSpanId must be non-zero'
+      );
     }
   }
 }
