@@ -2,6 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 import * as assert from 'node:assert';
+import unsafe from 'workerd:unsafe';
 
 // Flat array of all invocations observed by the tail handler.
 // Each entry captures trace metadata and concatenated event JSON.
@@ -348,17 +349,12 @@ export const test = {
     // propagating the outcome of the invocation may take longer. Wait briefly so this can go ahead.
     await scheduler.wait(50);
 
-    const hasPropagation = allInvocations.some(
-      (inv) => inv.parentSpanId !== undefined
-    );
+    // @all-autogates enables USER_SPAN_CONTEXT_PROPAGATION.
+    const expected = unsafe.isTestAutogateEnabled()
+      ? expectedWithPropagation
+      : expectedFlat;
 
-    if (hasPropagation) {
-      verifyTraceIds(allInvocations);
-    }
-
-    const tree = buildTree(allInvocations);
-    const expected = hasPropagation ? expectedWithPropagation : expectedFlat;
-
-    assert.deepStrictEqual(tree, expected);
+    verifyTraceIds(allInvocations);
+    assert.deepStrictEqual(buildTree(allInvocations), expected);
   },
 };
