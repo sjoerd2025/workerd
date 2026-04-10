@@ -133,26 +133,64 @@ KJ_TEST("InvocationSpanContext") {
   KJ_EXPECT(sc5.isTrigger());
 }
 
+KJ_TEST("InvocationSpanContext propagates traceFlags from trigger") {
+  setPredictableModeForTest();
+  FakeEntropySource fakeEntropySource;
+
+  // Trigger with traceFlags set — propagates to new invocation
+  auto trigger =
+      InvocationSpanContext(TraceId(1, 2), TraceId(3, 4), SpanId(5), static_cast<uint8_t>(0x01));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(trigger.getTraceFlags()) == 0x01);
+
+  auto sc = InvocationSpanContext::newForInvocation(trigger, fakeEntropySource);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(sc.getTraceFlags()) == 0x01);
+
+  // No trigger — traceFlags is absent
+  auto sc2 = InvocationSpanContext::newForInvocation(kj::none, fakeEntropySource);
+  KJ_EXPECT(sc2.getTraceFlags() == kj::none);
+}
+
 KJ_TEST("SpanContext") {
   setPredictableModeForTest();
   FakeEntropySource fakeEntropySource;
   auto sc =
       SpanContext(TraceId::fromEntropy(fakeEntropySource), SpanId::fromEntropy(fakeEntropySource));
 
-  // We can create a SpanContext...
   static constexpr auto kCheck = TraceId(0x2a2a2a2a2a2a2a2a, 0x2a2a2a2a2a2a2a2a);
   KJ_EXPECT(sc.getTraceId() == kCheck);
   KJ_EXPECT(sc.getSpanId() == SpanId(1));
+  KJ_EXPECT(sc.getTraceFlags() == kj::none);
 
-  // And serialize that to a capnp struct...
   capnp::MallocMessageBuilder builder;
   auto root = builder.initRoot<rpc::SpanContext>();
   sc.toCapnp(root);
 
-  // Then back again...
   auto sc2 = SpanContext::fromCapnp(root.asReader());
   KJ_EXPECT(sc2.getTraceId() == kCheck);
   KJ_EXPECT(sc2.getSpanId() == SpanId(1));
+  KJ_EXPECT(sc2.getTraceFlags() == kj::none);
+}
+
+KJ_TEST("SpanContext traceFlags preserved through capnp when set, absent when unset") {
+  auto sc = SpanContext(TraceId(1, 2), SpanId(3), static_cast<uint8_t>(0x01));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(sc.getTraceFlags()) == 0x01);
+
+  capnp::MallocMessageBuilder builder;
+  auto root = builder.initRoot<rpc::SpanContext>();
+  sc.toCapnp(root);
+
+  auto sc2 = SpanContext::fromCapnp(root.asReader());
+  KJ_EXPECT(sc2.getTraceId() == TraceId(1, 2));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(sc2.getSpanId()) == SpanId(3));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(sc2.getTraceFlags()) == 0x01);
+
+  auto sc3 = SpanContext(TraceId(4, 5), SpanId(6));
+  capnp::MallocMessageBuilder builder2;
+  auto root2 = builder2.initRoot<rpc::SpanContext>();
+  sc3.toCapnp(root2);
+
+  auto sc4 = SpanContext::fromCapnp(root2.asReader());
+  KJ_EXPECT(sc4.getTraceFlags() == kj::none);
 }
 
 KJ_TEST("Read/Write FetchEventInfo works") {
@@ -629,6 +667,7 @@ KJ_TEST("SpanContext::tryFromTraceparent valid") {
       "00-11223344556677889900aabbccddeeff-a1b2c3d4e5f60718-01"_kj));
   KJ_EXPECT(result.getTraceId() == TraceId(0x9900aabbccddeeff, 0x1122334455667788));
   KJ_EXPECT(KJ_ASSERT_NONNULL(result.getSpanId()) == SpanId(0xa1b2c3d4e5f60718));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result.getTraceFlags()) == 0x01);
 }
 
 KJ_TEST("SpanContext::tryFromTraceparent sampled with extra flags") {
@@ -636,6 +675,7 @@ KJ_TEST("SpanContext::tryFromTraceparent sampled with extra flags") {
       "00-11223344556677889900aabbccddeeff-a1b2c3d4e5f60718-03"_kj));
   KJ_EXPECT(result.getTraceId() == TraceId(0x9900aabbccddeeff, 0x1122334455667788));
   KJ_EXPECT(KJ_ASSERT_NONNULL(result.getSpanId()) == SpanId(0xa1b2c3d4e5f60718));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result.getTraceFlags()) == 0x03);
 }
 
 KJ_TEST("SpanContext::tryFromTraceparent rejects invalid inputs") {
@@ -694,8 +734,11 @@ KJ_TEST("SpanContext::tryFromTraceparent rejects invalid inputs") {
                 "00-11223344556677889900aabbccddeeff-0000000000000000-01"_kj) == kj::none);
 
   // Unsampled
-  KJ_EXPECT(SpanContext::tryFromTraceparent(
-                "00-11223344556677889900aabbccddeeff-a1b2c3d4e5f60718-00"_kj) == kj::none);
+  auto unsampled = KJ_ASSERT_NONNULL(SpanContext::tryFromTraceparent(
+      "00-11223344556677889900aabbccddeeff-a1b2c3d4e5f60718-00"_kj));
+  KJ_EXPECT(unsampled.getTraceId() == TraceId(0x9900aabbccddeeff, 0x1122334455667788));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(unsampled.getSpanId()) == SpanId(0xa1b2c3d4e5f60718));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(unsampled.getTraceFlags()) == 0x00);
 }
 
 }  // namespace

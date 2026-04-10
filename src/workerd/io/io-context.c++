@@ -264,10 +264,11 @@ void IoContext::IncomingRequest::delivered(kj::SourceLocation location) {
 
   KJ_IF_SOME(workerTracer, workerTracer) {
     if (util::Autogate::isEnabled(util::AutogateKey::USER_SPAN_CONTEXT_PROPAGATION)) {
-      auto traceId = getInvocationSpanContext().getTraceId();
-      currentUserTraceSpan = workerTracer->makeUserRequestSpan(kj::mv(traceId));
+      auto& invCtx = getInvocationSpanContext();
+      currentUserTraceSpan =
+          workerTracer->makeUserRequestSpan(invCtx.getTraceId(), invCtx.getTraceFlags());
     } else {
-      currentUserTraceSpan = workerTracer->makeUserRequestSpan(tracing::TraceId(nullptr));
+      currentUserTraceSpan = workerTracer->makeUserRequestSpan(tracing::TraceId(nullptr), kj::none);
     }
   }
 

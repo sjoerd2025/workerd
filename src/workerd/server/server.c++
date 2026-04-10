@@ -2214,9 +2214,10 @@ class Server::WorkerService final: public Service,
     }
 
     KJ_IF_SOME(w, workerTracer) {
-      w->setMakeUserRequestSpanFunc([&w = *w](tracing::TraceId traceId) {
+      w->setMakeUserRequestSpanFunc(
+          [&w = *w](tracing::TraceId traceId, kj::Maybe<uint8_t> traceFlags) {
         return SpanParent(kj::refcounted<UserSpanObserver>(
-            kj::refcounted<SequentialSpanSubmitter>(kj::addRef(w)), kj::mv(traceId)));
+            kj::refcounted<SequentialSpanSubmitter>(kj::addRef(w)), kj::mv(traceId), traceFlags));
       });
     }
     kj::Own<RequestObserver> observer =
@@ -2225,8 +2226,8 @@ class Server::WorkerService final: public Service,
     kj::Maybe<tracing::InvocationSpanContext> triggerContext;
     KJ_IF_SOME(ctx, metadata.userSpanParent.toSpanContext()) {
       KJ_IF_SOME(spanId, ctx.getSpanId()) {
-        triggerContext =
-            tracing::InvocationSpanContext(ctx.getTraceId(), tracing::TraceId::nullId, spanId);
+        triggerContext = tracing::InvocationSpanContext(
+            ctx.getTraceId(), tracing::TraceId::nullId, spanId, ctx.getTraceFlags());
       }
     }
 
