@@ -2223,7 +2223,11 @@ class Server::WorkerService final: public Service,
         kj::refcounted<RequestObserverWithTracer>(mapAddRef(workerTracer), waitUntilTasks);
 
     kj::Maybe<tracing::InvocationSpanContext> triggerContext;
-    KJ_IF_SOME(ctx, metadata.userSpanParent.toSpanContext()) {
+    auto maybeSpanCtx = metadata.userSpanParent.toSpanContext();
+    if (maybeSpanCtx == kj::none) {
+      maybeSpanCtx = kj::mv(metadata.userSpanContext);
+    }
+    KJ_IF_SOME(ctx, maybeSpanCtx) {
       KJ_IF_SOME(spanId, ctx.getSpanId()) {
         triggerContext =
             tracing::InvocationSpanContext(ctx.getTraceId(), tracing::TraceId::nullId, spanId);

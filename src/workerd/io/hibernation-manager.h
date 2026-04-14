@@ -131,9 +131,9 @@ class HibernationManagerImpl final: public Worker::Actor::HibernationManager {
     // This prevents us from dispatching it if we have already done so.
     bool hasDispatchedClose = false;
 
-    // User span parent captured at acceptWebSocket() time, restored when the DO is woken up
+    // Trace context captured at acceptWebSocket() time, restored when the DO is woken up
     // so that hibernation events are linked to the original trace.
-    SpanParent userSpanParent = SpanParent(nullptr);
+    kj::Maybe<tracing::SpanContext> userSpanContext;
 
     // Stores the last received autoResponseRequest timestamp.
     kj::Maybe<kj::Date> autoResponseTimestamp;
