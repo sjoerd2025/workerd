@@ -278,8 +278,12 @@ kj::Promise<void> HibernationManagerImpl::handleSocketTermination(
 
     KJ_REQUIRE_NONNULL(params).setTimeout(eventTimeoutMs);
     // Dispatch the event, restoring the trace context captured at acceptWebSocket time.
+    SpanParent userSpanParent = SpanParent(nullptr);
+    KJ_IF_SOME(ctx, hib.userSpanContext) {
+      userSpanParent = SpanParent::fromSpanContext(tracing::SpanContext::clone(ctx));
+    }
     auto workerInterface = loopback->getWorker({
-      .userSpanContext = hib.userSpanContext.map(tracing::SpanContext::clone),
+      .userSpanParent = kj::mv(userSpanParent),
     });
     event = workerInterface
                 ->customEvent(kj::heap<api::HibernatableWebSocketCustomEvent>(
@@ -386,8 +390,12 @@ kj::Promise<void> HibernationManagerImpl::readLoop(HibernatableWebSocket& hib) {
     params.setTimeout(eventTimeoutMs);
     auto isClose = params.isCloseEvent();
     // Dispatch the event, restoring the trace context captured at acceptWebSocket time.
+    SpanParent userSpanParent = SpanParent(nullptr);
+    KJ_IF_SOME(ctx, hib.userSpanContext) {
+      userSpanParent = SpanParent::fromSpanContext(tracing::SpanContext::clone(ctx));
+    }
     auto workerInterface = loopback->getWorker({
-      .userSpanContext = hib.userSpanContext.map(tracing::SpanContext::clone),
+      .userSpanParent = kj::mv(userSpanParent),
     });
     co_await workerInterface->customEvent(kj::heap<api::HibernatableWebSocketCustomEvent>(
         hibernationEventType, kj::mv(params), *this));
