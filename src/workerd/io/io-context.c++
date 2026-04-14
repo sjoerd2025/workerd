@@ -1012,27 +1012,13 @@ kj::Own<WorkerInterface> IoContext::getSubrequestChannelImpl(uint channel,
   IoChannelFactory::SubrequestMetadata metadata{
     .cfBlobJson = kj::mv(cfBlobJson),
     .parentSpan = tracing.getInternalSpanParent(),
-    .userSpanContext = getUserSpanContext(tracing),
+    .userSpanContext = tracing.getUserSpanContext(),
     .featureFlagsForFl = mapCopyString(worker->getIsolate().getFeatureFlagsForFl()),
   };
 
   auto client = channelFactory.startSubrequest(channel, kj::mv(metadata));
 
   return client;
-}
-
-kj::Maybe<tracing::SpanContext> IoContext::getUserSpanContext(TraceContext& tracing) {
-  if (!util::Autogate::isEnabled(util::AutogateKey::USER_SPAN_CONTEXT_PROPAGATION)) {
-    return kj::none;
-  }
-  const auto& invCtx = getInvocationSpanContext();
-  auto traceId = invCtx.getTraceId();
-  auto spanId = invCtx.getSpanId();
-  KJ_IF_SOME(observer, tracing.getUserSpanParent().getObserver()) {
-    auto& userObs = kj::downcast<UserSpanObserver>(observer);
-    spanId = userObs.getSpanId();
-  }
-  return tracing::SpanContext(traceId, spanId);
 }
 
 kj::Own<kj::HttpClient> IoContext::getHttpClient(
@@ -1127,7 +1113,23 @@ SpanBuilder IoContext::makeTraceSpan(kj::ConstString operationName) {
 TraceContext IoContext::makeUserTraceSpan(kj::ConstString operationName) {
   auto span = makeTraceSpan(operationName.clone());
   auto userSpan = getCurrentUserTraceSpan().newChild(kj::mv(operationName));
+  if (util::Autogate::isEnabled(util::AutogateKey::USER_SPAN_CONTEXT_PROPAGATION)) {
+    auto userTraceId = getInvocationSpanContext().getTraceId();
+    return TraceContext(kj::mv(span), kj::mv(userSpan), kj::mv(userTraceId));
+  }
   return TraceContext(kj::mv(span), kj::mv(userSpan));
+}
+
+kj::Maybe<tracing::SpanContext> TraceContext::getUserSpanContext() {
+  KJ_IF_SOME(traceId, userTraceId) {
+    kj::Maybe<tracing::SpanId> spanId;
+    KJ_IF_SOME(observer, getUserSpanParent().getObserver()) {
+      auto& userObs = kj::downcast<UserSpanObserver>(observer);
+      spanId = userObs.getSpanId();
+    }
+    return tracing::SpanContext(traceId, spanId);
+  }
+  return kj::none;
 }
 
 void IoContext::taskFailed(kj::Exception&& exception) {

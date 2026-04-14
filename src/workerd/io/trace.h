@@ -1224,6 +1224,10 @@ class TraceContext {
   TraceContext(SpanBuilder span, SpanBuilder userSpan)
       : span(kj::mv(span)),
         userSpan(kj::mv(userSpan)) {}
+  TraceContext(SpanBuilder span, SpanBuilder userSpan, tracing::TraceId userTraceId)
+      : span(kj::mv(span)),
+        userSpan(kj::mv(userSpan)),
+        userTraceId(kj::mv(userTraceId)) {}
   TraceContext(TraceContext&& other) = default;
   TraceContext& operator=(TraceContext&& other) = default;
   KJ_DISALLOW_COPY(TraceContext);
@@ -1241,9 +1245,14 @@ class TraceContext {
     return SpanParent(userSpan);
   }
 
+  // Build a SpanContext for propagating user span context to subrequests.
+  // Returns kj::none if the USER_SPAN_CONTEXT_PROPAGATION autogate is not enabled.
+  kj::Maybe<tracing::SpanContext> getUserSpanContext();
+
  private:
   SpanBuilder span;
   SpanBuilder userSpan;
+  kj::Maybe<tracing::TraceId> userTraceId;
 };
 
 // RAII object that measures the time duration over its lifetime. It tags this duration onto a
