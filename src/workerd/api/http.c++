@@ -2427,7 +2427,7 @@ Fetcher::ClientWithTracing Fetcher::getClientWithTracing(
           [&](TraceContext& tracing, IoChannelFactory& ioChannelFactory) {
         return channel->startRequest({.cfBlobJson = kj::mv(cfStr),
             .parentSpan = tracing.getInternalSpanParent(),
-            .userSpanContext = tracing.getUserSpanContext()});
+            .userSpanParent = tracing.getUserSpanParent()});
       }, {
         .inHouse = isInHouse,
         .wrapMetrics = !isInHouse,

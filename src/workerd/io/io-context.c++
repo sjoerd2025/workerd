@@ -263,7 +263,12 @@ void IoContext::IncomingRequest::delivered(kj::SourceLocation location) {
   metrics->delivered();
 
   KJ_IF_SOME(workerTracer, workerTracer) {
-    currentUserTraceSpan = workerTracer->makeUserRequestSpan();
+    if (util::Autogate::isEnabled(util::AutogateKey::USER_SPAN_CONTEXT_PROPAGATION)) {
+      auto traceId = getInvocationSpanContext().getTraceId();
+      currentUserTraceSpan = workerTracer->makeUserRequestSpan(kj::mv(traceId));
+    } else {
+      currentUserTraceSpan = workerTracer->makeUserRequestSpan(tracing::TraceId(nullptr));
+    }
   }
 
   KJ_IF_SOME(a, context->actor) {
@@ -1012,7 +1017,7 @@ kj::Own<WorkerInterface> IoContext::getSubrequestChannelImpl(uint channel,
   IoChannelFactory::SubrequestMetadata metadata{
     .cfBlobJson = kj::mv(cfBlobJson),
     .parentSpan = tracing.getInternalSpanParent(),
-    .userSpanContext = tracing.getUserSpanContext(),
+    .userSpanParent = tracing.getUserSpanParent(),
     .featureFlagsForFl = mapCopyString(worker->getIsolate().getFeatureFlagsForFl()),
   };
 
@@ -1113,23 +1118,7 @@ SpanBuilder IoContext::makeTraceSpan(kj::ConstString operationName) {
 TraceContext IoContext::makeUserTraceSpan(kj::ConstString operationName) {
   auto span = makeTraceSpan(operationName.clone());
   auto userSpan = getCurrentUserTraceSpan().newChild(kj::mv(operationName));
-  if (util::Autogate::isEnabled(util::AutogateKey::USER_SPAN_CONTEXT_PROPAGATION)) {
-    auto userTraceId = getInvocationSpanContext().getTraceId();
-    return TraceContext(kj::mv(span), kj::mv(userSpan), kj::mv(userTraceId));
-  }
   return TraceContext(kj::mv(span), kj::mv(userSpan));
-}
-
-kj::Maybe<tracing::SpanContext> TraceContext::getUserSpanContext() {
-  KJ_IF_SOME(traceId, userTraceId) {
-    kj::Maybe<tracing::SpanId> spanId;
-    KJ_IF_SOME(observer, getUserSpanParent().getObserver()) {
-      auto& userObs = kj::downcast<UserSpanObserver>(observer);
-      spanId = userObs.getSpanId();
-    }
-    return tracing::SpanContext(traceId, spanId);
-  }
-  return kj::none;
 }
 
 void IoContext::taskFailed(kj::Exception&& exception) {

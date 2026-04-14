@@ -1076,6 +1076,9 @@ class SpanParent {
     return observer;
   }
 
+  // Return the serializable identity of this span for cross-boundary propagation.
+  kj::Maybe<tracing::SpanContext> toSpanContext();
+
  private:
   kj::Maybe<kj::Own<SpanObserver>> observer;
 };
@@ -1197,7 +1200,20 @@ class SpanObserver: public kj::Refcounted {
   virtual kj::Date getTime() {
     return kj::systemPreciseCalendarClock().now();
   }
+
+  // Return the serializable identity of this span for cross-boundary propagation.
+  // Returns kj::none if this observer doesn't carry identity.
+  virtual kj::Maybe<tracing::SpanContext> toSpanContext() {
+    return kj::none;
+  }
 };
+
+inline kj::Maybe<tracing::SpanContext> SpanParent::toSpanContext() {
+  KJ_IF_SOME(obs, observer) {
+    return obs->toSpanContext();
+  }
+  return kj::none;
+}
 
 inline SpanParent::SpanParent(SpanBuilder& builder): observer(mapAddRef(builder.observer)) {}
 
@@ -1224,10 +1240,6 @@ class TraceContext {
   TraceContext(SpanBuilder span, SpanBuilder userSpan)
       : span(kj::mv(span)),
         userSpan(kj::mv(userSpan)) {}
-  TraceContext(SpanBuilder span, SpanBuilder userSpan, tracing::TraceId userTraceId)
-      : span(kj::mv(span)),
-        userSpan(kj::mv(userSpan)),
-        userTraceId(kj::mv(userTraceId)) {}
   TraceContext(TraceContext&& other) = default;
   TraceContext& operator=(TraceContext&& other) = default;
   KJ_DISALLOW_COPY(TraceContext);
@@ -1245,14 +1257,9 @@ class TraceContext {
     return SpanParent(userSpan);
   }
 
-  // Build a SpanContext for propagating user span context to subrequests.
-  // Returns kj::none if the USER_SPAN_CONTEXT_PROPAGATION autogate is not enabled.
-  kj::Maybe<tracing::SpanContext> getUserSpanContext();
-
  private:
   SpanBuilder span;
   SpanBuilder userSpan;
-  kj::Maybe<tracing::TraceId> userTraceId;
 };
 
 // RAII object that measures the time duration over its lifetime. It tags this duration onto a

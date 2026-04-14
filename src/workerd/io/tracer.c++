@@ -584,9 +584,9 @@ void WorkerTracer::setWorkerAttribute(kj::ConstString key, Span::TagValue value)
   attributes.add(tracing::Attribute{kj::mv(key), kj::mv(value)});
 }
 
-SpanParent BaseTracer::makeUserRequestSpan() {
+SpanParent BaseTracer::makeUserRequestSpan(tracing::TraceId traceId) {
   KJ_IF_SOME(func, makeUserRequestSpanFunc) {
-    return func();
+    return func(kj::mv(traceId));
   } else {
     return SpanParent(nullptr);
   }
@@ -616,7 +616,14 @@ void WorkerTracer::setJsRpcInfo(const tracing::InvocationSpanContext& context,
 }
 
 kj::Own<SpanObserver> UserSpanObserver::newChild() {
-  return kj::refcounted<UserSpanObserver>(kj::addRef(*submitter), spanId);
+  return kj::refcounted<UserSpanObserver>(kj::addRef(*submitter), spanId, traceId);
+}
+
+kj::Maybe<tracing::SpanContext> UserSpanObserver::toSpanContext() {
+  if (traceId == nullptr) {
+    return kj::none;
+  }
+  return tracing::SpanContext(traceId, spanId);
 }
 
 void UserSpanObserver::report(const Span& span) {

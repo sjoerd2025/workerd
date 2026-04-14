@@ -2214,16 +2214,16 @@ class Server::WorkerService final: public Service,
     }
 
     KJ_IF_SOME(w, workerTracer) {
-      w->setMakeUserRequestSpanFunc([&w = *w]() {
+      w->setMakeUserRequestSpanFunc([&w = *w](tracing::TraceId traceId) {
         return SpanParent(kj::refcounted<UserSpanObserver>(
-            kj::refcounted<SequentialSpanSubmitter>(kj::addRef(w))));
+            kj::refcounted<SequentialSpanSubmitter>(kj::addRef(w)), kj::mv(traceId)));
       });
     }
     kj::Own<RequestObserver> observer =
         kj::refcounted<RequestObserverWithTracer>(mapAddRef(workerTracer), waitUntilTasks);
 
     kj::Maybe<tracing::InvocationSpanContext> triggerContext;
-    KJ_IF_SOME(ctx, metadata.userSpanContext) {
+    KJ_IF_SOME(ctx, metadata.userSpanParent.toSpanContext()) {
       KJ_IF_SOME(spanId, ctx.getSpanId()) {
         triggerContext =
             tracing::InvocationSpanContext(ctx.getTraceId(), tracing::TraceId::nullId, spanId);

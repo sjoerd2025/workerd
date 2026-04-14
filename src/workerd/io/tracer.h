@@ -71,9 +71,9 @@ class BaseTracer: public kj::Refcounted {
   // be available afterwards.
   virtual void recordTimestamp(kj::Date timestamp) = 0;
 
-  SpanParent makeUserRequestSpan();
+  SpanParent makeUserRequestSpan(tracing::TraceId traceId);
 
-  using MakeUserRequestSpanFunc = kj::Function<SpanParent()>;
+  using MakeUserRequestSpanFunc = kj::Function<SpanParent(tracing::TraceId)>;
 
   // Allow setting the user request span after the tracer has been created so its observer can
   // reference the tracer. This can only be set once.
@@ -211,24 +211,35 @@ class UserSpanObserver final: public SpanObserver {
   UserSpanObserver(kj::Own<SpanSubmitter> submitter)
       : submitter(kj::mv(submitter)),
         spanId(tracing::SpanId::nullId),
-        parentSpanId(tracing::SpanId::nullId) {}
+        parentSpanId(tracing::SpanId::nullId),
+        traceId(nullptr) {}
+  // constructor for top-level observer with trace ID
+  UserSpanObserver(kj::Own<SpanSubmitter> submitter, tracing::TraceId traceId)
+      : submitter(kj::mv(submitter)),
+        spanId(tracing::SpanId::nullId),
+        parentSpanId(tracing::SpanId::nullId),
+        traceId(kj::mv(traceId)) {}
   // constructor for subsequent observers attached to a span
-  UserSpanObserver(kj::Own<SpanSubmitter> submitter, tracing::SpanId parentSpanId)
+  UserSpanObserver(
+      kj::Own<SpanSubmitter> submitter, tracing::SpanId parentSpanId, tracing::TraceId traceId)
       : submitter(kj::mv(submitter)),
         spanId(this->submitter->makeSpanId()),
-        parentSpanId(parentSpanId) {}
+        parentSpanId(parentSpanId),
+        traceId(kj::mv(traceId)) {}
   KJ_DISALLOW_COPY(UserSpanObserver);
 
   kj::Own<SpanObserver> newChild() override;
   void report(const Span& span) override;
   void reportStart(kj::ConstString operationName, kj::Date startTime) override;
   kj::Date getTime() override;
+  kj::Maybe<tracing::SpanContext> toSpanContext() override;
   tracing::SpanId getSpanId();
 
  private:
   kj::Own<SpanSubmitter> submitter;
   tracing::SpanId spanId;
   tracing::SpanId parentSpanId;
+  tracing::TraceId traceId;
 };
 
 }  // namespace workerd
