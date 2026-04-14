@@ -113,13 +113,9 @@ void HibernationManagerImpl::acceptWebSocket(
   auto hib = kj::heap<HibernatableWebSocket>(kj::mv(ws), tags, *this);
   HibernatableWebSocket& refToHibernatable = *hib.get();
 
-  // TODO(mar): Improve accept span context capturing — route snapshotted user span context
-  // to serialization point instead of capturing only the invocation root span here.
-  if (util::Autogate::isEnabled(util::AutogateKey::USER_SPAN_CONTEXT_PROPAGATION)) {
-    auto& invCtx = IoContext::current().getInvocationSpanContext();
-    refToHibernatable.userSpanContext =
-        tracing::SpanContext(invCtx.getTraceId(), invCtx.getSpanId());
-  }
+  // Capture the current user span parent so hibernation events can be linked to the
+  // original trace when the DO is woken up.
+  refToHibernatable.userSpanParent = IoContext::current().getCurrentUserTraceSpan();
 
   allWs.push_front(kj::mv(hib));
   refToHibernatable.node = allWs.begin();
@@ -279,7 +275,7 @@ kj::Promise<void> HibernationManagerImpl::handleSocketTermination(
     KJ_REQUIRE_NONNULL(params).setTimeout(eventTimeoutMs);
     // Dispatch the event, restoring the trace context captured at acceptWebSocket time.
     auto workerInterface = loopback->getWorker({
-      .userSpanContext = hib.userSpanContext.map(tracing::SpanContext::clone),
+      .userSpanParent = hib.userSpanParent.addRef(),
     });
     event = workerInterface
                 ->customEvent(kj::heap<api::HibernatableWebSocketCustomEvent>(
@@ -387,7 +383,7 @@ kj::Promise<void> HibernationManagerImpl::readLoop(HibernatableWebSocket& hib) {
     auto isClose = params.isCloseEvent();
     // Dispatch the event, restoring the trace context captured at acceptWebSocket time.
     auto workerInterface = loopback->getWorker({
-      .userSpanContext = hib.userSpanContext.map(tracing::SpanContext::clone),
+      .userSpanParent = hib.userSpanParent.addRef(),
     });
     co_await workerInterface->customEvent(kj::heap<api::HibernatableWebSocketCustomEvent>(
         hibernationEventType, kj::mv(params), *this));
