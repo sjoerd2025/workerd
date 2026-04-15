@@ -293,7 +293,7 @@ struct SpanContext {
   SpanContext& operator=(SpanContext&& other) = default;
 
   inline bool operator==(const SpanContext& other) const {
-    return traceId == other.traceId && spanId == other.spanId && traceFlags == other.traceFlags;
+    return traceId == other.traceId && spanId == other.spanId;
   }
 
   inline const TraceId& getTraceId() const {
