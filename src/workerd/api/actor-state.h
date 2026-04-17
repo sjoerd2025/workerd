@@ -325,6 +325,10 @@ class DurableObjectStorage: public jsg::Object, public DurableObjectStorageOpera
 
     if (flags.getWorkerdExperimental()) {
       JSG_METHOD(waitForBookmark);
+
+      JSG_READONLY_INSTANCE_PROPERTY(primaryStub, getPrimary);
+
+      // Deprecated: see primaryStub.
       JSG_READONLY_INSTANCE_PROPERTY(primary, getPrimary);
     }
 
