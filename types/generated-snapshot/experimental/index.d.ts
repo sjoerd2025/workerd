@@ -785,7 +785,9 @@ interface DurableObjectStorage {
   readonly primaryStub?: DurableObjectStub;
   /** @deprecated Use `primaryStub` instead. */
   readonly primary?: DurableObjectStub;
+  /** @deprecated Use `configureReadReplication()` instead. */
   ensureReplicas(): void;
+  /** @deprecated Use `configureReadReplication()` instead. */
   disableReplicas(): void;
   configureReadReplication(
     options: DurableObjectReadReplicationOptions,

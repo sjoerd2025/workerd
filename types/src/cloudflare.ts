@@ -53,6 +53,8 @@ export default {
   },
   DurableObjectStorage: {
     primary: `* @deprecated Use \`primaryStub\` instead. `,
+    ensureReplicas: `* @deprecated Use \`configureReadReplication()\` instead. `,
+    disableReplicas: `* @deprecated Use \`configureReadReplication()\` instead. `,
   },
   performance: {
     $: `*
